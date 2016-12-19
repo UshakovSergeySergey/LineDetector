@@ -4,6 +4,8 @@
 #include <array>
 #include <iostream>
 
+#define DEBUG_DRAW
+
 LineDetector::LineDetector() :
 	m_kernel_size(3),
 	m_kernels()
@@ -40,6 +42,9 @@ void LineDetector::detect(const cv::Mat& image)
 	//white lines(tracks) of 1-pixel with, 8-connected, on black background
 	cv::Mat skeleton;
 	getSkeleton(image, skeleton);
+#ifdef DEBUG_DRAW
+	cv::imwrite("1_get_skeleton.png", skeleton);
+#endif
 	////////////////////////////////////////////////////////////////
 	//skeleton vectorization
 	//in tracks we have pixel-by-pixel records of each track in skeleton
@@ -48,28 +53,40 @@ void LineDetector::detect(const cv::Mat& image)
 	//btw, we will use this information about junctions later in 'unite_tracks'
 	std::vector<std::vector<cv::Point2i>> tracks;
 	trackSkeleton(skeleton, tracks);
+#ifdef DEBUG_DRAW
+	cv::Mat img;
+	img = image.clone();
+	img.setTo(cv::Scalar(0, 0, 0));
+	for each(auto& track in tracks)
+	{
+		if(track.size() > 1)
+		{
+			for(int i = 0; i < track.size() - 1; ++i)
+				cv::line(img, track[i], track[i + 1], cv::Scalar(255, 255, 255));
+		}
+	}
+	cv::imwrite("2_track_skeleton.png", img);
+#endif
 	////////////////////////////////////////////////////////////////
 	//unite broken tracks
 	//first we said that all junctions are endpoints, but in fact they are not
 	//for each junction point we now decide, which pair of broken segments to unite
-//    tracks = filter(lambda x: x is not None, unite_tracks(tracks))
-/*
-    tracks = filter(lambda x: x is not None, unite_tracks(tracks))
-    ################################################################
-    # some tracks are false positives due to very sensitive edge detection
-    # here we confirm true positives (where there is a real line)
-    # and filter false positives (no real line)
-    tracks = confirm_tracks(tracks, img)
-    ################################################################
-    # here we find linear (or, almost linear) parts in each track
-    # sort of piecewise linear approximation
-    lines = get_lines(tracks)
-    ################################################################
-    # some extracted lines are really parts of one line, broken by some reason
-    # here we try to unite at least some of such broken lines, in obvious cases
-    lines = afterall_unite_lines(lines)
-    return lines
-*/
+	std::vector<std::vector<cv::Point2i>> united_tracks;
+	uniteTracks(tracks, united_tracks);
+//	////////////////////////////////////////////////////////////////
+//	//some tracks are false positives due to very sensitive edge detection
+//	//here we confirm true positives(where there is a real line)
+//	//and filter false positives(no real line)
+//	united_tracks = confirmTracks(united_tracks, image);
+//	////////////////////////////////////////////////////////////////
+//	//here we find linear(or, almost linear) parts in each track
+//	//sort of piecewise linear approximation
+//	lines = getLines(united_tracks);
+//	////////////////////////////////////////////////////////////////
+//	//some extracted lines are really parts of one line, broken by some reason
+//	//here we try to unite at least some of such broken lines, in obvious cases
+//	lines = afterallUniteLines(lines);
+//	return lines;
 }
 
 void LineDetector::getSkeleton(const cv::Mat& image, cv::Mat& edges) const
@@ -210,7 +227,9 @@ void LineDetector::trackSkeleton(cv::Mat& edges, std::vector<std::vector<cv::Poi
 	{
 		if(p1.x < p2.x)
 			return true;
-		return p1.y < p2.y;
+		if(p1.x == p2.x)
+			return p1.y < p2.y;
+		return false;
 	};
 	std::sort(juncpoints.begin(), juncpoints.end(), lambda_less);
 
@@ -225,7 +244,7 @@ void LineDetector::trackSkeleton(cv::Mat& edges, std::vector<std::vector<cv::Poi
 			{
 				for(int column = -1; column < 2; ++column)
 				{
-					if(juncpoint.y + row < 0 || edges.rows <= juncpoint.y + row || juncpoint.x + column < 0 || edges.cols <= juncpoint.x + column)
+					if(!isInside(edges, cv::Point2i(juncpoint.x + column, juncpoint.y + row)))
 						continue;
 					sum += edges.at<unsigned char>(juncpoint.y + row, juncpoint.x + column);
 				}
@@ -256,8 +275,9 @@ void LineDetector::trackSkeleton(cv::Mat& edges, std::vector<std::vector<cv::Poi
 	endpoints.clear();
 	for each(auto& contour in contours)
 	{
-		cv::approxPolyDP(contour, contour, 2.0f, true);
-		cv::Point2i point = contour[0];
+		std::vector<cv::Point> cnt;
+		cv::approxPolyDP(contour, cnt, 2.0f, true);
+		cv::Point2i point = cnt[0];
 		//search for white pixels near contour point
 		//we search in 5x5 square, but not in 3x3, because contour approximation can shift contour
 		//a bit from real pixels
@@ -267,6 +287,8 @@ void LineDetector::trackSkeleton(cv::Mat& edges, std::vector<std::vector<cv::Poi
 		{
 			for(int row = -2; row <= 3; ++row)
 			{
+				if(!isInside(edges, cv::Point2i(point.x + column, point.y + row)))
+					continue;
 				if(edges.at<unsigned char>(point.y + row, point.x + column) > 0)
 				{
 					shift_point.x = column;
@@ -280,7 +302,8 @@ void LineDetector::trackSkeleton(cv::Mat& edges, std::vector<std::vector<cv::Poi
 				break;
 		}
 		//y_,x_ = np.transpose(np.nonzero(skel[y-2:y+3, x-2:x+3]))[0]
-		endpoints.push_back(point + shift_point - cv::Point2i(2, 2));
+		if(done)
+			endpoints.push_back(point + shift_point - cv::Point2i(2, 2));
 	}
 
 	//finally track each closed loop
@@ -313,11 +336,18 @@ void LineDetector::junctionAndEndpoint(cv::Mat& edges, std::vector<cv::Point2i>&
 		  1,   2,  4,
 		128, 256,  8,
 		 64,  32, 16);
-	FilterPredicate predicate = [](const cv::Mat& image, const int row, const int column) -> bool {
-		//single points
-		return image.at<float>(row, column) == 256;
-	};
-	applyFilter(kernel, edges, predicate);
+
+	cv::Mat float_edges;
+	edges.convertTo(float_edges, CV_32F, 1.0f / 255.0f);
+	cv::filter2D(float_edges, float_edges, -1, kernel);
+	for(int row = 0; row < edges.rows; ++row)
+	{
+		for(int column = 0; column < edges.cols; ++column)
+		{
+			if(float_edges.at<float>(row, column) == 256)
+				edges.at<unsigned char>(row, column) = 0;
+		}
+	}
 
 	{
 		//values meaning junction
@@ -326,8 +356,6 @@ void LineDetector::junctionAndEndpoint(cv::Mat& edges, std::vector<cv::Point2i>&
 			256+1+64+8, 256+1+4+32, 256+4+16+128, 256+16+64+2,
 			256+1+4+16, 256+4+16+64, 256+16+64+1, 256+64+1+4, 256+1+4+16+64
 		};
-		cv::Mat float_edges;
-		edges.convertTo(float_edges, CV_32F, 1.0f / 255.0f);
 		for(int row = 0; row < edges.rows; ++row)
 		{
 			for(int column = 0; column < edges.cols; ++column)
@@ -346,9 +374,6 @@ void LineDetector::junctionAndEndpoint(cv::Mat& edges, std::vector<cv::Point2i>&
 
 	//values for endpoints
 	endpoints.clear();
-
-	cv::Mat float_edges;
-	edges.convertTo(float_edges, CV_32F, 1.0f / 255.0f);
 
 	for(int row = 0; row < float_edges.rows; ++row)
 	{
@@ -370,7 +395,9 @@ void LineDetector::junctionAndEndpoint(cv::Mat& edges, std::vector<cv::Point2i>&
 	{
 		if(p1.x < p2.x)
 			return true;
-		return p1.y < p2.y;
+		if(p1.x == p2.x)
+			return p1.y < p2.y;
+		return false;
 	});
 }
 
@@ -450,8 +477,12 @@ void LineDetector::getPotentialPoints(const cv::Mat& edges, const cv::Point2i& p
 	potential_points.clear();
 	for(int row = -1; row < 2; ++row)
 		for(int column = -1; column < 2; ++column)
-			if(predicate(edges, cv::Point2i(point.y + row, point.x + column)))
+		{
+			if(!isInside(edges, cv::Point2i(point.x + column, point.y + row)))
+				continue;
+			if(predicate(edges, cv::Point2i(point.x + column, point.y + row)))
 				potential_points.push_back(cv::Point2i(column, row));
+		}
 }
 
 void LineDetector::uniteTracks(const std::vector<std::vector<cv::Point2i>>& lines, std::vector<std::vector<cv::Point2i>>& united_lines) const
@@ -719,3 +750,19 @@ void LineDetector::chainToLine(const std::vector<int>& chain, const std::vector<
 		}
 	}
 }
+
+//std::vector<std::vector<cv::Point2i>> LineDetector::getLines(const std::vector<std::vector<cv::Point2i>>& tracks) const
+//{
+//	std::vector<std::vector<cv::Point2i>> lines;
+//	lines.reserve(tracks.size());
+//
+//	for each(auto& track in tracks)
+//	{
+//		std::vector<std::vector<cv::Point2i>> current_line;
+//		processTrack(track, current_line);
+//		if(!current_line.empty())
+//			lines.insert(lines.end(), current_line.begin(), current_line.end());
+//	}
+//
+//	return lines;
+//}

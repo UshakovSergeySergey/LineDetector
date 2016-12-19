@@ -13,8 +13,11 @@ class LineDetector
 		LineDetector();
 		void detect(const cv::Mat& image);
 
-	private:
-		static size_t pointHash(const cv::Point2i& point);
+	public:
+		static size_t pointHash(const cv::Point2i& point)
+		{
+			return std::hash<int>()(point.x) ^ std::hash<int>()(point.y);
+		}
 
 		typedef std::function<bool(const cv::Mat&, const int, const int)> FilterPredicate;
 		typedef std::function<bool(const cv::Mat&, const cv::Point2i&)> SearchPredicate;
@@ -45,6 +48,19 @@ class LineDetector
 		float dist(const cv::Point2i& p1, const cv::Point2i& p2) const;
 		void removeNode(std::unordered_multimap<int, int>& graph, const int node) const;
 		void chainToLine(const std::vector<int>& chain, const std::vector<std::vector<cv::Point2i>>& lines, std::vector<cv::Point2i>& line, std::vector<int>& used_lines) const;
+
+//		//confirm_tracks
+//
+//		//get_lines
+//		std::vector<std::vector<cv::Point2i>> getLines(const std::vector<std::vector<cv::Point2i>>& lines) const;
+//		void processTrack(const std::vector<cv::Point2i>& track, std::vector<std::vector<cv::Point2i>>& lines) const;
+//
+//		//afterall_unite_lines
+
+		bool isInside(const cv::Mat& image, const cv::Point2i& point) const
+		{
+			return (0 <= point.x && point.x < image.cols && 0 <= point.y && point.y < image.rows);
+		}
 
 	private:
 		const int m_kernel_size;
