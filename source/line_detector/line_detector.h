@@ -7,21 +7,28 @@
 #include <functional>
 #include <deque>
 
+namespace std
+{
+	template<>
+	struct hash<cv::Point2i>
+	{
+		size_t operator()(const cv::Point2i& point) const
+		{
+			return std::hash<int>()(point.x) ^ std::hash<int>()(point.y);
+		}
+	};
+}
+
 class LineDetector
 {
 	public:
 		LineDetector();
 		void detect(const cv::Mat& image);
 
-	public:
-		static size_t pointHash(const cv::Point2i& point)
-		{
-			return std::hash<int>()(point.x) ^ std::hash<int>()(point.y);
-		}
-
+	private:
 		typedef std::function<bool(const cv::Mat&, const int, const int)> FilterPredicate;
 		typedef std::function<bool(const cv::Mat&, const cv::Point2i&)> SearchPredicate;
-		typedef std::unordered_multimap<cv::Point2i, std::pair<int, int>, std::function<decltype(pointHash)>> Endpoints;
+		typedef std::unordered_multimap<cv::Point2i, std::pair<int, int>> Endpoints;
 
 	private:
 		//get_skeleton
@@ -49,11 +56,14 @@ class LineDetector
 		void removeNode(std::unordered_multimap<int, int>& graph, const int node) const;
 		void chainToLine(const std::vector<int>& chain, const std::vector<std::vector<cv::Point2i>>& lines, std::vector<cv::Point2i>& line, std::vector<int>& used_lines) const;
 
-//		//confirm_tracks
-//
-//		//get_lines
-//		std::vector<std::vector<cv::Point2i>> getLines(const std::vector<std::vector<cv::Point2i>>& lines) const;
-//		void processTrack(const std::vector<cv::Point2i>& track, std::vector<std::vector<cv::Point2i>>& lines) const;
+		//confirm_tracks
+		void confirmTracks(const std::vector<std::vector<cv::Point2i>>& tracks, const cv::Mat& image, std::vector<std::vector<cv::Point2i>>& confirmed) const;
+		void imageDiff(const cv::Mat& im1, const cv::Mat& im2, cv::Mat& result) const;
+		void grad(const cv::Mat& image, const int d, cv::Mat& result) const;
+
+		//get_lines
+		void getLines(const std::vector<std::vector<cv::Point2i>>& tracks, std::vector<std::vector<cv::Point2i>>& lines) const;
+		void processTrack(const std::vector<cv::Point2i>& track, std::vector<std::vector<cv::Point2i>>& lines) const;
 //
 //		//afterall_unite_lines
 

@@ -43,7 +43,9 @@ void LineDetector::detect(const cv::Mat& image)
 	cv::Mat skeleton;
 	getSkeleton(image, skeleton);
 #ifdef DEBUG_DRAW
-	cv::imwrite("1_get_skeleton.png", skeleton);
+	{
+		cv::imwrite("1_get_skeleton.png", skeleton);
+	}
 #endif
 	////////////////////////////////////////////////////////////////
 	//skeleton vectorization
@@ -54,18 +56,20 @@ void LineDetector::detect(const cv::Mat& image)
 	std::vector<std::vector<cv::Point2i>> tracks;
 	trackSkeleton(skeleton, tracks);
 #ifdef DEBUG_DRAW
-	cv::Mat img;
-	img = image.clone();
-	img.setTo(cv::Scalar(0, 0, 0));
-	for each(auto& track in tracks)
 	{
-		if(track.size() > 1)
+		cv::Mat img;
+		img = image.clone();
+		img.setTo(cv::Scalar(0, 0, 0));
+		for each(auto& track in tracks)
 		{
-			for(int i = 0; i < track.size() - 1; ++i)
-				cv::line(img, track[i], track[i + 1], cv::Scalar(255, 255, 255));
+			if(track.size() > 1)
+			{
+				for(size_t i = 0; i < track.size() - 1; ++i)
+					cv::line(img, track[i], track[i + 1], cv::Scalar(255, 255, 255));
+			}
 		}
+		cv::imwrite("2_track_skeleton.png", img);
 	}
-	cv::imwrite("2_track_skeleton.png", img);
 #endif
 	////////////////////////////////////////////////////////////////
 	//unite broken tracks
@@ -73,15 +77,65 @@ void LineDetector::detect(const cv::Mat& image)
 	//for each junction point we now decide, which pair of broken segments to unite
 	std::vector<std::vector<cv::Point2i>> united_tracks;
 	uniteTracks(tracks, united_tracks);
-//	////////////////////////////////////////////////////////////////
-//	//some tracks are false positives due to very sensitive edge detection
-//	//here we confirm true positives(where there is a real line)
-//	//and filter false positives(no real line)
-//	united_tracks = confirmTracks(united_tracks, image);
-//	////////////////////////////////////////////////////////////////
-//	//here we find linear(or, almost linear) parts in each track
-//	//sort of piecewise linear approximation
-//	lines = getLines(united_tracks);
+#ifdef DEBUG_DRAW
+	{
+		cv::Mat img;
+		img = image.clone();
+		img.setTo(cv::Scalar(0, 0, 0));
+		for each(auto& track in united_tracks)
+		{
+			if(track.size() > 1)
+			{
+				for(size_t i = 0; i < track.size() - 1; ++i)
+					cv::line(img, track[i], track[i + 1], cv::Scalar(255, 255, 255));
+			}
+		}
+		cv::imwrite("3_unite_tracks.png", img);
+	}
+#endif
+	////////////////////////////////////////////////////////////////
+	//some tracks are false positives due to very sensitive edge detection
+	//here we confirm true positives(where there is a real line)
+	//and filter false positives(no real line)
+	std::vector<std::vector<cv::Point2i>> confirmed_tracks;
+	confirmTracks(united_tracks, image, confirmed_tracks);
+#ifdef DEBUG_DRAW
+	{
+		cv::Mat img;
+		img = image.clone();
+		img.setTo(cv::Scalar(0, 0, 0));
+		for each(auto& track in confirmed_tracks)
+		{
+			if(track.size() > 1)
+			{
+				for(size_t i = 0; i < track.size() - 1; ++i)
+					cv::line(img, track[i], track[i + 1], cv::Scalar(255, 255, 255));
+			}
+		}
+		cv::imwrite("4_confirm_tracks.png", img);
+	}
+#endif
+	////////////////////////////////////////////////////////////////
+	//here we find linear(or, almost linear) parts in each track
+	//sort of piecewise linear approximation
+	std::vector<std::vector<cv::Point2i>> lines;
+	getLines(confirmed_tracks, lines);
+#ifdef DEBUG_DRAW
+	{
+		cv::Mat img;
+		img = image.clone();
+		img.setTo(cv::Scalar(0, 0, 0));
+		for each(auto& track in lines)
+		{
+			if(track.size() > 1)
+			{
+				for(size_t i = 0; i < track.size() - 1; ++i)
+					cv::line(img, track[i], track[i + 1], cv::Scalar(255, 255, 255));
+			}
+		}
+		cv::imwrite("5_get_lines.png", img);
+	}
+#endif
 //	////////////////////////////////////////////////////////////////
 //	//some extracted lines are really parts of one line, broken by some reason
 //	//here we try to unite at least some of such broken lines, in obvious cases
@@ -549,46 +603,100 @@ void LineDetector::buildGraph(const std::vector<std::vector<cv::Point2i>>& lines
 					const auto& l2 = lines[id2];
 					const auto& l3 = lines[id3];
 
-					float d1;
-					float d2;
-					float d3;
+					cv::Point2i d1;
+					cv::Point2i d2;
+					cv::Point2i d3;
 
-					//get the last one from first five points
-					//get the first one from last five points
-					if(p1 == 0)	d1 = dist(l1[(l1.size() > 4 ? 4 : l1.size() - 1)], ep);
-					else		d1 = dist(l1[(l1.size() - 5 >= 0 ? l1.size() - 5 : 0)], ep);
-					if(p2== 0)	d2 = dist(l2[(l2.size() > 4 ? 4 : l2.size() - 1)], ep);
-					else		d2 = dist(l2[(l2.size() - 5 >= 0 ? l2.size() - 5 : 0)], ep);
-					if(p3 == 0)	d3 = dist(l3[(l3.size() > 4 ? 4 : l3.size() - 1)], ep);
-					else		d3 = dist(l3[(l3.size() - 5 >= 0 ? l3.size() - 5 : 0)], ep);
+					if(p1 == 0)	d1 = l1[(l1.size() > 4 ? 4 : l1.size() - 1)];
+					else		d1 = l1[(l1.size() - 5 >= 0 ? l1.size() - 5 : 0)];
+					if(p2== 0)	d2 = l2[(l2.size() > 4 ? 4 : l2.size() - 1)];
+					else		d2 = l2[(l2.size() - 5 >= 0 ? l2.size() - 5 : 0)];
+					if(p3 == 0)	d3 = l3[(l3.size() > 4 ? 4 : l3.size() - 1)];
+					else		d3 = l3[(l3.size() - 5 >= 0 ? l3.size() - 5 : 0)];
+
+					float d12 = dist(d1, d2);
+					float d23 = dist(d2, d3);
+					float d13 = dist(d1, d3);
 
 					if(number_of_connections == 3)
 					{
-						if(d1 <= d2 && d1 <= d3)	addEdge(graph, id2, id3);
-						if(d2 <= d1 && d2 <= d3)	addEdge(graph, id1, id3);
-						if(d3 <= d1 && d3 <= d2)	addEdge(graph, id1, id2);
+						float max = std::max(std::max(d12, d23), d13);
+						if(max == d12)	addEdge(graph, id1, id2);
+						if(max == d23)	addEdge(graph, id2, id3);
+						if(max == d13)	addEdge(graph, id1, id3);
 						break;
 					}
 
 					++range_iter;
 					const auto id4 = range_iter->second.first;
-					if(d1 <= d2 && d1 <= d3)
-					{
-						addEdge(graph, id2, id3);
-						addEdge(graph, id1, id4);
-					}
-					if(d2 <= d1 && d2 <= d3)
-					{
-						addEdge(graph, id1, id3);
-						addEdge(graph, id2, id4);
-					}
-					if(d3 <= d1 && d3 <= d2)
+					const auto p4 = range_iter->second.second;
+					const auto& l4 = lines[id4];
+					cv::Point2i d4;
+					if(p4 == 0)	d4 = l4[(l4.size() > 4 ? 4 : l4.size() - 1)];
+					else		d4 = l4[(l4.size() - 5 >= 0 ? l4.size() - 5 : 0)];
+
+					float d14 = dist(d1, d4);
+					float d24 = dist(d2, d4);
+					float d34 = dist(d3, d4);
+
+					float opt1 = d12 + d34;
+					float opt2 = d13 + d24;
+					float opt3 = d14 + d23;
+
+					float max = std::max(std::max(opt1, opt2), opt3);
+					if(max == opt1)
 					{
 						addEdge(graph, id1, id2);
 						addEdge(graph, id3, id4);
 					}
+					if(max == opt2)
+					{
+						addEdge(graph, id1, id3);
+						addEdge(graph, id2, id4);
+					}
+					if(max == opt3)
+					{
+						addEdge(graph, id1, id4);
+						addEdge(graph, id2, id3);
+					}
 
 					break;
+//					//get the last one from first five points
+//					//get the first one from last five points
+//					if(p1 == 0)	d1 = dist(l1[(l1.size() > 4 ? 4 : l1.size() - 1)], ep);
+//					else		d1 = dist(l1[(l1.size() - 5 >= 0 ? l1.size() - 5 : 0)], ep);
+//					if(p2== 0)	d2 = dist(l2[(l2.size() > 4 ? 4 : l2.size() - 1)], ep);
+//					else		d2 = dist(l2[(l2.size() - 5 >= 0 ? l2.size() - 5 : 0)], ep);
+//					if(p3 == 0)	d3 = dist(l3[(l3.size() > 4 ? 4 : l3.size() - 1)], ep);
+//					else		d3 = dist(l3[(l3.size() - 5 >= 0 ? l3.size() - 5 : 0)], ep);
+//
+//					if(number_of_connections == 3)
+//					{
+//						if(d1 <= d2 && d1 <= d3)	addEdge(graph, id2, id3);
+//						if(d2 <= d1 && d2 <= d3)	addEdge(graph, id1, id3);
+//						if(d3 <= d1 && d3 <= d2)	addEdge(graph, id1, id2);
+//						break;
+//					}
+//
+//					++range_iter;
+//					const auto id4 = range_iter->second.first;
+//					if(d1 <= d2 && d1 <= d3)
+//					{
+//						addEdge(graph, id2, id3);
+//						addEdge(graph, id1, id4);
+//					}
+//					if(d2 <= d1 && d2 <= d3)
+//					{
+//						addEdge(graph, id1, id3);
+//						addEdge(graph, id2, id4);
+//					}
+//					if(d3 <= d1 && d3 <= d2)
+//					{
+//						addEdge(graph, id1, id2);
+//						addEdge(graph, id3, id4);
+//					}
+//
+//					break;
 				}
 			default:
 				std::cout << "Warning! unite lines doesn't support more than 4 connections" << std::endl;
@@ -751,18 +859,126 @@ void LineDetector::chainToLine(const std::vector<int>& chain, const std::vector<
 	}
 }
 
-//std::vector<std::vector<cv::Point2i>> LineDetector::getLines(const std::vector<std::vector<cv::Point2i>>& tracks) const
-//{
-//	std::vector<std::vector<cv::Point2i>> lines;
-//	lines.reserve(tracks.size());
-//
-//	for each(auto& track in tracks)
-//	{
-//		std::vector<std::vector<cv::Point2i>> current_line;
-//		processTrack(track, current_line);
-//		if(!current_line.empty())
-//			lines.insert(lines.end(), current_line.begin(), current_line.end());
-//	}
-//
-//	return lines;
-//}
+void LineDetector::confirmTracks(const std::vector<std::vector<cv::Point2i>>& tracks, const cv::Mat& image, std::vector<std::vector<cv::Point2i>>& confirmed) const
+{
+	cv::Mat result = image.clone();
+	grad(image, 4, result);
+
+	cv::Mat hsv;
+	cv::cvtColor(result, hsv, cv::COLOR_BGR2HSV);
+
+	confirmed.clear();
+	confirmed.reserve(tracks.size());
+	for each(const auto& track in tracks)
+	{
+		double score = 0.0;
+		for each(const auto& point in track)
+		{
+			score += hsv.at<cv::Vec3b>(point.y, point.x)(2);
+		}
+		if(score > 1000)
+			confirmed.push_back(track);
+	}
+}
+
+void LineDetector::imageDiff(const cv::Mat& im1, const cv::Mat& im2, cv::Mat& result) const
+{
+	cv::Mat first;
+	cv::subtract(im1, im2, first);
+	cv::Mat second;
+	cv::subtract(im2, im1, second);
+	cv::add(first, second, result);
+}
+
+void LineDetector::grad(const cv::Mat& image, const int d, cv::Mat& result) const
+{
+	cv::Mat first;
+	imageDiff(image(cv::Rect(d, d, image.cols - d, image.rows - d)), image(cv::Rect(0, 0, image.cols - d, image.rows - d)), first);
+	cv::Mat second;
+	imageDiff(image(cv::Rect(0, d, image.cols - d, image.rows - d)), image(cv::Rect(d, 0, image.cols - d, image.rows - d)), second);
+	cv::add(first, second, result);
+	cv::resize(result, result, cv::Size(image.cols, image.rows));
+}
+
+void LineDetector::getLines(const std::vector<std::vector<cv::Point2i>>& tracks, std::vector<std::vector<cv::Point2i>>& lines) const
+{
+	lines.clear();
+	lines.reserve(tracks.size());
+
+	for each(auto& track in tracks)
+	{
+		std::vector<std::vector<cv::Point2i>> current_line;
+		processTrack(track, current_line);
+		if(!current_line.empty())
+			lines.insert(lines.end(), current_line.begin(), current_line.end());
+	}
+}
+
+void LineDetector::processTrack(const std::vector<cv::Point2i>& line, std::vector<std::vector<cv::Point2i>>& segments) const
+{
+	const int frame_size = 15;
+	const int stride = 3;
+	const int rebuild_corridor_each = 8;
+	const int min_corridor = 20;
+
+	segments.clear();
+	if(line.size() < frame_size)
+		return;
+
+	int frame_pointer = 0;
+	int step = 0;
+	std::vector<cv::Point2i> current_segment;
+	std::array<float, 4> corridor;
+	corridor[3] = -std::numeric_limits<float>::max();
+
+	while(true)
+	{
+		bool ok = false;
+		std::vector<cv::Point2i> current_frame;
+		current_frame.insert(current_frame.end(), std::next(line.cbegin(), frame_pointer), std::next(line.cbegin(), frame_pointer + frame_size));
+		if(adjustLinearity(segmentLinearity(current_frame), current_segment) < 1.5f)
+		{
+			if(current_segment.empty())
+			{
+				current_segment.insert(current_segment.end(), current_frame.cbegin(), std::prev(current_frame.cend(), stride));
+				step = 0;
+			}
+			if(min_corridor < current_segment.size())
+			{
+				step++;
+				if(corridor[3] < 0)
+				{
+					fitLine(current_segment, corridor);
+					ok = true;
+				}
+				else
+				{
+					if(isInCorridor(current_frame.back(), corridor))
+						ok = true;
+				}
+				if(step % rebuild_corridor_each == 0)
+					fitLine(current_segment, corridor);
+			}
+			else
+				ok = true;
+		}
+		if(ok)
+			current_segment.insert(current_segment.end(), std::prev(current_frame.cend(), stride), current_frame.cend());
+		else
+		{
+			if(!current_segment.empty())
+			{
+				segments.push_back(current_segment);
+				current_segment.clear();
+				corridor[3] = -std::numeric_limits<float>::max();
+				frame_pointer += frame_size - stride;
+			}
+		}
+		frame_pointer += stride;
+		if(line.size() - frame_size <= frame_pointer)
+			break;
+	}
+
+	if(!current_segment.empty())
+		segments.push_back(current_segment);
+}
