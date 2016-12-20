@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "line_detector.h"
 #include <functional>
+#include <numeric>
 #include <array>
 #include <iostream>
 
@@ -118,7 +119,7 @@ void LineDetector::detect(const cv::Mat& image)
 	////////////////////////////////////////////////////////////////
 	//here we find linear(or, almost linear) parts in each track
 	//sort of piecewise linear approximation
-	std::vector<std::vector<cv::Point2i>> lines;
+	std::vector<Segment> lines;
 	getLines(confirmed_tracks, lines);
 #ifdef DEBUG_DRAW
 	{
@@ -126,19 +127,13 @@ void LineDetector::detect(const cv::Mat& image)
 		img = image.clone();
 		img.setTo(cv::Scalar(0, 0, 0));
 		for each(auto& track in lines)
-		{
-			if(track.size() > 1)
-			{
-				for(size_t i = 0; i < track.size() - 1; ++i)
-					cv::line(img, track[i], track[i + 1], cv::Scalar(255, 255, 255));
-			}
-		}
+			cv::line(img, track.p1, track.p2, cv::Scalar(255, 255, 255));
 		cv::imwrite("5_get_lines.png", img);
 	}
 #endif
-//	////////////////////////////////////////////////////////////////
-//	//some extracted lines are really parts of one line, broken by some reason
-//	//here we try to unite at least some of such broken lines, in obvious cases
+	////////////////////////////////////////////////////////////////
+	//some extracted lines are really parts of one line, broken by some reason
+	//here we try to unite at least some of such broken lines, in obvious cases
 //	lines = afterallUniteLines(lines);
 //	return lines;
 }
@@ -900,7 +895,7 @@ void LineDetector::grad(const cv::Mat& image, const int d, cv::Mat& result) cons
 	cv::resize(result, result, cv::Size(image.cols, image.rows));
 }
 
-void LineDetector::getLines(const std::vector<std::vector<cv::Point2i>>& tracks, std::vector<std::vector<cv::Point2i>>& lines) const
+void LineDetector::getLines(const std::vector<std::vector<cv::Point2i>>& tracks, std::vector<Segment>& lines) const
 {
 	lines.clear();
 	lines.reserve(tracks.size());
@@ -908,13 +903,14 @@ void LineDetector::getLines(const std::vector<std::vector<cv::Point2i>>& tracks,
 	for each(auto& track in tracks)
 	{
 		std::vector<std::vector<cv::Point2i>> current_line;
-		processTrack(track, current_line);
+		std::vector<Segment> current_equations;
+		processTrack(track, current_line, current_equations);
 		if(!current_line.empty())
-			lines.insert(lines.end(), current_line.begin(), current_line.end());
+			lines.insert(lines.end(), current_equations.begin(), current_equations.end());
 	}
 }
 
-void LineDetector::processTrack(const std::vector<cv::Point2i>& line, std::vector<std::vector<cv::Point2i>>& segments) const
+void LineDetector::processTrack(const std::vector<cv::Point2i>& line, std::vector<std::vector<cv::Point2i>>& segments, std::vector<Segment>& equations) const
 {
 	const int frame_size = 15;
 	const int stride = 3;
@@ -963,7 +959,22 @@ void LineDetector::processTrack(const std::vector<cv::Point2i>& line, std::vecto
 				ok = true;
 		}
 		if(ok)
-			current_segment.insert(current_segment.end(), std::prev(current_frame.cend(), stride), current_frame.cend());
+		{
+			//current_segment.insert(current_segment.end(), std::prev(current_frame.cend(), stride), current_frame.cend());
+			int n = current_frame.size() - stride;
+			int length = stride;
+			if(n < 0)
+			{
+				n = 0;
+				length = stride - current_frame.size();
+			}
+			cv::Point2i point(0, 0);
+			for(size_t point_counter = n; point_counter < current_frame.size(); ++point_counter)
+				point += current_frame[point_counter];
+			point.x = static_cast<int>(point.x / static_cast<float>(length));
+			point.y = static_cast<int>(point.y / static_cast<float>(length));
+			current_segment.push_back(point);
+		}
 		else
 		{
 			if(!current_segment.empty())
@@ -981,4 +992,158 @@ void LineDetector::processTrack(const std::vector<cv::Point2i>& line, std::vecto
 
 	if(!current_segment.empty())
 		segments.push_back(current_segment);
+
+	equations.reserve(segments.size());
+	for each(const auto& segment in segments)
+	{
+		if(dist(segment[0], segment[segment.size() - 1]) > 10)
+		{
+			Segment equation;
+			encodeSegment(segment, equation);
+			equations.push_back(equation);
+		}
+	}
+
+	if(equations.size() == 0)
+		return;
+
+	for(size_t equation_counter = 0; equation_counter < equations.size() - 1; ++equation_counter)
+	{
+		auto& eq1 = equations[equation_counter];
+		auto& eq2 = equations[equation_counter + 1];
+		if(dist(eq1.p2, eq2.p1) < 10.0f)
+		{
+			cv::Point2i ip = intersectPoint(
+				eq1.line_equation[0], eq1.line_equation[1], eq1.line_equation[2],
+				eq2.line_equation[0], eq2.line_equation[1], eq2.line_equation[2]
+			);
+			if(dist(ip, eq1.p2) < 30.0f && dist(ip, eq2.p1) < 30.0f)
+			{
+				equations[equation_counter].p2 = ip;
+				equations[equation_counter + 1].p1 = ip;
+			}
+		}
+	}
+}
+
+float LineDetector::adjustLinearity(const float linearity, const std::vector<cv::Point2i>& segment) const
+{
+	if(segment.size() <= 20)
+		return linearity / 0.5f;
+	if(20 < segment.size() && segment.size() <= 100)
+		return linearity / (0.5f + 0.5f * (segment.size() - 20.0f) / 80.0f);
+	return linearity;
+}
+
+float LineDetector::segmentLinearity(const std::vector<cv::Point2i>& line) const
+{
+	std::vector<cv::Point2f> segment;
+	segment.reserve(line.size());
+	for each(auto point in line)
+	{
+		segment.push_back(cv::Point2f(static_cast<float>(point.x), static_cast<float>(point.y)));
+	}
+
+	const cv::Point2f p1 = segment.front();
+	std::for_each(segment.begin(), segment.end(), [&](cv::Point2f& point)
+	{
+		point -= p1;
+		point.x = abs(point.x);
+		point.y = abs(point.y);
+	});
+
+	const cv::Point2f p2 = segment.back();
+	float hypot = sqrt(p2.x * p2.x + p2.y * p2.y);
+	if(hypot <= std::numeric_limits<float>::epsilon())
+		return std::numeric_limits<float>::max();
+
+	const float cos = p2.x / hypot;
+	const float sin = -p2.y / hypot;
+	cv::Matx22f mat;
+	mat << cos, -sin,
+		   sin, cos;
+	std::for_each(segment.begin(), segment.end(),  [&](cv::Point2f& point)
+	{
+		cv::Vec2f vec(point.x, point.y);
+		vec = mat * vec;
+		point = cv::Point2f(vec(0), vec(1));
+	});
+
+	auto first_lambda = [](cv::Point2f sum, cv::Point2f point) -> cv::Point2f
+	{
+		point.x = abs(point.x);
+		point.y = abs(point.y);
+		return sum + point;
+	};
+	const cv::Point2f first_sum = std::accumulate(segment.begin(), segment.end(), cv::Point2f(0.0f, 0.0f), first_lambda);
+	const cv::Point2f second_sum = std::accumulate(segment.begin(), segment.end(), cv::Point2f(0.0f, 0.0f), [](cv::Point2f sum, cv::Point2f point){ return sum + point; });
+	const float sum = (first_sum.y * 0.8f + abs(second_sum.y) * 0.2f) / segment.size();
+	return sum;
+}
+
+void LineDetector::fitLine(const std::vector<cv::Point2i>& points, std::array<float, 4>& line_equation) const
+{
+	cv::Vec4f line;
+	cv::fitLine(points, line, cv::DIST_L2, 0.0, 0.01, 0.01);
+	const cv::Point2f p1(line(2), line(3));
+	const cv::Point2f p2(line(2) + 10.0f * line(0), line(3) + 10.0f * line(1));
+	lineEquation(p1, p2, line_equation);
+}
+
+bool LineDetector::isInCorridor(const cv::Point2i& point, const std::array<float, 4>& line_equation, const float corridor_width) const
+{
+	return abs(distanceToLine(point, line_equation)) <= corridor_width;
+}
+
+void LineDetector::encodeSegment(const std::vector<cv::Point2i>& segment, Segment& equation) const
+{
+	fitLine(segment, equation.line_equation);
+	equation.p1 = perpPoint(equation.line_equation, segment[0]);
+	equation.p2 = perpPoint(equation.line_equation, segment[segment.size() - 1]);
+	equation.length = dist(equation.p1, equation.p2);
+}
+
+void LineDetector::lineEquation(const cv::Point2f& p1, const cv::Point2f& p2, std::array<float, 4>& line_equation) const
+{
+	float a = p1.y - p2.y;
+	float b = p2.x - p1.x;
+	float c = p1.x * p2.y - p2.x * p1.y;
+	float sqr = sqrt(a * a + b * b);
+	line_equation[0] = a;
+	line_equation[1] = b;
+	line_equation[2] = c;
+	line_equation[3] = sqr;
+}
+
+float LineDetector::distanceToLine(const cv::Point2i& point, const std::array<float, 4>& line_equation) const
+{
+	return (line_equation[0] * point.x + line_equation[1] * point.y + line_equation[2]) / line_equation[3];
+}
+
+cv::Point2i LineDetector::perpPoint(const std::array<float, 4>& line_equation, const cv::Point2i point) const
+{
+	const float a1 = line_equation[0];
+	const float b1 = line_equation[1];
+	const float c1 = line_equation[2];
+
+	const float a2 = b1;
+	const float b2 = -a1;
+	const float c2 = a1 * point.y - b1 * point.x;
+
+	return intersectPoint(a1, b1, c1, a2, b2, c2);
+}
+
+cv::Point2i LineDetector::intersectPoint(const float a1, const float b1, const float c1, const float a2, const float b2, const float c2) const
+{
+	float b1_ = b1;
+	if(abs(b1_) < std::numeric_limits<float>::epsilon())
+		b1_ += 0.0001f;
+	float denom = a2 * b1_ - a1 * b2;
+	if(abs(denom) < std::numeric_limits<float>::epsilon())
+		denom += 0.00001f;
+	cv::Point2i result;
+	const float x = (c1 * b2 - c2 * b1_) / denom;
+	result.x = static_cast<int>(x);
+	result.y = static_cast<int>((-a1 * x - c1) / b1_);
+	return result;
 }

@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <functional>
 #include <deque>
+#include <array>
 
 namespace std
 {
@@ -26,6 +27,13 @@ class LineDetector
 		void detect(const cv::Mat& image);
 
 	private:
+		typedef struct
+		{
+			std::array<float, 4> line_equation;
+			cv::Point2i p1;
+			cv::Point2i p2;
+			float length;
+		} Segment;
 		typedef std::function<bool(const cv::Mat&, const int, const int)> FilterPredicate;
 		typedef std::function<bool(const cv::Mat&, const cv::Point2i&)> SearchPredicate;
 		typedef std::unordered_multimap<cv::Point2i, std::pair<int, int>> Endpoints;
@@ -62,10 +70,19 @@ class LineDetector
 		void grad(const cv::Mat& image, const int d, cv::Mat& result) const;
 
 		//get_lines
-		void getLines(const std::vector<std::vector<cv::Point2i>>& tracks, std::vector<std::vector<cv::Point2i>>& lines) const;
-		void processTrack(const std::vector<cv::Point2i>& track, std::vector<std::vector<cv::Point2i>>& lines) const;
-//
-//		//afterall_unite_lines
+		void getLines(const std::vector<std::vector<cv::Point2i>>& tracks, std::vector<Segment>& lines) const;
+		void processTrack(const std::vector<cv::Point2i>& track, std::vector<std::vector<cv::Point2i>>& lines, std::vector<Segment>& equations) const;
+		float adjustLinearity(const float linearity, const std::vector<cv::Point2i>& segment) const;
+		float segmentLinearity(const std::vector<cv::Point2i>& line) const;
+		void fitLine(const std::vector<cv::Point2i>& points, std::array<float, 4>& line_equation) const;
+		bool isInCorridor(const cv::Point2i& point, const std::array<float, 4>& line_equation, const float corridor_width = 2.0f) const;
+		void encodeSegment(const std::vector<cv::Point2i>& segment, Segment& equation) const;
+		void lineEquation(const cv::Point2f& p1, const cv::Point2f& p2, std::array<float, 4>& line_equation) const;
+		float distanceToLine(const cv::Point2i& point, const std::array<float, 4>& line_equation) const;
+		cv::Point2i perpPoint(const std::array<float, 4>& line_equation, const cv::Point2i point) const;
+		cv::Point2i intersectPoint(const float a1, const float b1, const float c1, const float a2, const float b2, const float c2) const;
+
+		//afterall_unite_lines
 
 		bool isInside(const cv::Mat& image, const cv::Point2i& point) const
 		{
