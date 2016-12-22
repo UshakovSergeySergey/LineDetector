@@ -8,7 +8,8 @@ int main()
 	cv::resize(image, image, cv::Size(static_cast<int>(image.cols * scale), static_cast<int>(image.rows * scale)), 0, 0, cv::INTER_AREA);
 
 	LineDetector line_detector;
-	line_detector.detect(image);
+	std::vector<LineDetector::Segment> lines;
+	line_detector.detect(image, lines);
 	return 0;
 }
 

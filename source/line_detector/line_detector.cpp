@@ -37,7 +37,7 @@ LineDetector::LineDetector() :
 		-1, 0, -1));
 }
 
-void LineDetector::detect(const cv::Mat& image)
+void LineDetector::detect(const cv::Mat& image, std::vector<Segment>& united_lines)
 {
 	//skeleton is an image of the same size as 'image'
 	//white lines(tracks) of 1-pixel with, 8-connected, on black background
@@ -134,8 +134,18 @@ void LineDetector::detect(const cv::Mat& image)
 	////////////////////////////////////////////////////////////////
 	//some extracted lines are really parts of one line, broken by some reason
 	//here we try to unite at least some of such broken lines, in obvious cases
-//	lines = afterallUniteLines(lines);
-//	return lines;
+	united_lines.clear();
+	afterallUniteLines(lines, united_lines);
+#ifdef DEBUG_DRAW
+	{
+		cv::Mat img;
+		img = image.clone();
+		img.setTo(cv::Scalar(0, 0, 0));
+		for each(auto& track in united_lines)
+			cv::line(img, track.p1, track.p2, cv::Scalar(255, 255, 255));
+		cv::imwrite("6_afterall_unite_lines.png", img);
+	}
+#endif
 }
 
 void LineDetector::getSkeleton(const cv::Mat& image, cv::Mat& edges) const
@@ -1146,4 +1156,157 @@ cv::Point2i LineDetector::intersectPoint(const float a1, const float b1, const f
 	result.x = static_cast<int>(x);
 	result.y = static_cast<int>((-a1 * x - c1) / b1_);
 	return result;
+}
+
+void LineDetector::afterallUniteLines(const std::vector<Segment>& lines, std::vector<Segment>& united_lines) const
+{
+	std::vector<std::pair<float, int>> angles;
+	computeAngles(lines, angles);
+
+	std::unordered_multimap<int, int> graph;
+	buildGraph(lines, angles, graph);
+
+	std::deque<int> initial_nodes;
+	getInitialNodes(graph, initial_nodes);
+
+	std::vector<std::vector<int>> chains;
+	findChains(graph, initial_nodes, chains);
+
+	united_lines.clear();
+	assembleLines(chains, lines, united_lines);
+}
+
+void LineDetector::computeAngles(const std::vector<Segment>& lines, std::vector<std::pair<float, int>>& angles) const
+{
+	const int number_of_lines = static_cast<int>(lines.size());
+	angles.reserve(number_of_lines);
+	for(int line_counter = 0; line_counter < number_of_lines; ++line_counter)
+	{
+		float angle = atan2(-lines[line_counter].line_equation[0], lines[line_counter].line_equation[1]);
+		angles.push_back(std::make_pair(angle, line_counter));
+	}
+	std::sort(angles.begin(), angles.end(), [](const std::pair<float, int>& first, const std::pair<float, int>& second)->bool{ return first.first < second.second; });
+}
+
+void LineDetector::buildGraph(const std::vector<Segment>& lines, const std::vector<std::pair<float, int>>& angles, std::unordered_multimap<int, int>& graph) const
+{
+	const int number_of_lines = static_cast<int>(lines.size());
+	for(int i = 0; i < number_of_lines; ++i)
+	{
+		const int current_line_index = angles[i].second;
+		const float current_line_angle = angles[i].first;
+		for(int j = i + 1; j < number_of_lines; ++j)
+		{
+			const int next_line_index = angles[j].second;
+			const float next_line_angle = angles[j].first;
+			if(abs(current_line_angle - next_line_angle) >= 0.05f)
+				break;
+			std::vector<float> dists;
+			dists.push_back(dist(lines[current_line_index].p1, lines[next_line_index].p1));
+			dists.push_back(dist(lines[current_line_index].p1, lines[next_line_index].p2));
+			dists.push_back(dist(lines[current_line_index].p2, lines[next_line_index].p1));
+			dists.push_back(dist(lines[current_line_index].p2, lines[next_line_index].p2));
+			int min_dist_index = std::distance(dists.begin(), std::min_element(dists.begin(), dists.end()));
+			if(dists[min_dist_index] < 10.0f)
+			{
+				cv::Point2i p_1;
+				cv::Point2i p_2;
+				switch(min_dist_index)
+				{
+					case 0:
+						p_1 = lines[current_line_index].p2;
+						p_2 = lines[next_line_index].p2;
+						break;
+					case 1:
+						p_1 = lines[current_line_index].p2;
+						p_2 = lines[next_line_index].p1;
+						break;
+					case 2:
+						p_1 = lines[current_line_index].p1;
+						p_2 = lines[next_line_index].p2;
+						break;
+					case 3:
+						p_1 = lines[current_line_index].p1;
+						p_2 = lines[next_line_index].p1;
+						break;
+				}
+				std::array<float, 4> equation;
+				lineEquation(p_1, p_2, equation);
+				float angle = atan2(-equation[0], equation[1]);
+				if(abs(current_line_angle - angle) < 0.03f && abs(next_line_angle - angle) < 0.03f)
+					addEdge(graph, current_line_index, next_line_index);
+				else
+					break;
+			}
+		}
+	}
+}
+
+void LineDetector::assembleLines(const std::vector<std::vector<int>>& chains, const std::vector<Segment>& lines, std::vector<Segment>& united_lines) const
+{
+	std::vector<int> used_lines;
+	used_lines.resize(lines.size(), -1);
+
+	united_lines.clear();
+
+	for each(auto chain in chains)
+	{
+		Segment line;
+		chainToLine(chain, lines, line, used_lines);
+		united_lines.push_back(line);
+	}
+
+	for(size_t line_counter = 0; line_counter < lines.size(); ++line_counter)
+	{
+		if(used_lines[line_counter] < 0)
+			united_lines.push_back(lines[line_counter]);
+	}
+}
+
+void LineDetector::chainToLine(const std::vector<int>& chain, const std::vector<Segment>& lines, Segment& line, std::vector<int>& used_lines) const
+{
+	used_lines[chain[0]] = 1;
+	line = lines[chain[0]];
+
+	for(size_t link_counter = 1; link_counter < chain.size(); ++link_counter)
+	{
+		used_lines[chain[link_counter]] = 1;
+		auto next_line = lines[chain[link_counter]];
+
+		const auto p11 = line.p1;
+		const auto p12 = line.p2;
+		const auto p21 = next_line.p1;
+		const auto p22 = next_line.p2;
+
+		std::vector<float> dists;
+		dists.push_back(dist(p11, p21));
+		dists.push_back(dist(p11, p22));
+		dists.push_back(dist(p12, p21));
+		dists.push_back(dist(p12, p22));
+		int min_dist_index = std::distance(dists.begin(), std::min_element(dists.begin(), dists.end()));
+
+		switch(min_dist_index)
+		{
+			case 0:
+				line.p1 = p12;
+				line.p2 = p22;
+				line.length = dist(p12, p22);
+				break;
+			case 1:
+				line.p1 = p12;
+				line.p2 = p21;
+				line.length = dist(p12, p21);
+				break;
+			case 2:
+				line.p1 = p11;
+				line.p2 = p22;
+				line.length = dist(p11, p22);
+				break;
+			case 3:
+				line.p1 = p11;
+				line.p2 = p21;
+				line.length = dist(p11, p21);
+				break;
+		}
+	}
 }

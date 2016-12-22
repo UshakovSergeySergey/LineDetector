@@ -1,27 +1,18 @@
-﻿Построение начато 20.12.2016 4:19:46.
-     1>Проект "E:\GIT\LineDetector\build\vs2010\LineDetector.vcxproj" в узле 2 (целевые объекты build).
+﻿Построение начато 22.12.2016 14:58:35.
+     1>Проект "D:\MINE_PERSONAL\GIT\LineDetector\build\vs2010\LineDetector.vcxproj" в узле 2 (целевые объекты build).
      1>InitializeBuildStatus:
          Создание "line_detector\Win32\Release\line_detector.unsuccessfulbuild", так как было задано "AlwaysCreate".
        ClCompile:
          Для всех выходных данных обновления не требуется.
-         E:\Program Files\Microsoft Visual Studio 10.0\VC\bin\CL.exe /c /IE:\GIT\LineDetector\build\vs2010\\..\..\lib\opencv_3\include /Zi /nologo /W3 /WX- /O2 /Oi /Oy- /GL /D WIN32 /D NDEBUG /D _CONSOLE /D _UNICODE /D UNICODE /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yu"StdAfx.h" /Fp"line_detector\Win32\Release\line_detector.pch" /Fo"line_detector\Win32\Release\\" /Fd"line_detector\Win32\Release\vc100.pdb" /Gd /TP /analyze- /errorReport:prompt ..\..\source\line_detector\line_detector.cpp ..\..\source\line_detector\main.cpp
-         line_detector.cpp
-     1>..\..\source\line_detector\line_detector.cpp(989): warning C4018: <=: несоответствие типов со знаком и без знака
-         main.cpp
+         Для всех выходных данных обновления не требуется.
        Link:
-         E:\Program Files\Microsoft Visual Studio 10.0\VC\bin\link.exe /ERRORREPORT:PROMPT /OUT:"E:\GIT\LineDetector\build\vs2010\\..\..\bin\Win32\Release\line_detector.exe" /INCREMENTAL:NO /NOLOGO /LIBPATH:E:\GIT\LineDetector\build\vs2010\\..\..\lib\opencv_3\x86\vc10\lib opencv_imgproc310.lib opencv_highgui310.lib opencv_core310.lib opencv_imgcodecs310.lib opencv_ximgproc310.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /ManifestFile:"line_detector\Win32\Release\line_detector.exe.intermediate.manifest" /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /DEBUG /PDB:"E:\GIT\LineDetector\bin\Win32\Release\line_detector.pdb" /SUBSYSTEM:CONSOLE /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"E:\GIT\LineDetector\build\vs2010\\..\..\bin\Win32\Release\line_detector.lib" /MACHINE:X86 line_detector\Win32\Release\line_detector.obj
-         line_detector\Win32\Release\main.obj
-         line_detector\Win32\Release\stdafx.obj
-         Создание кода
-         Создание кода завершено
-         LineDetector.vcxproj -> E:\GIT\LineDetector\build\vs2010\\..\..\bin\Win32\Release\line_detector.exe
-       Manifest:
-         C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\bin\mt.exe /nologo /verbose /outputresource:"E:\GIT\LineDetector\build\vs2010\\..\..\bin\Win32\Release\line_detector.exe;#1" /manifest line_detector\Win32\Release\line_detector.exe.intermediate.manifest
+         Для всех выходных данных обновления не требуется.
+         LineDetector.vcxproj -> D:\MINE_PERSONAL\GIT\LineDetector\build\vs2010\\..\..\bin\Win32\Release\line_detector.exe
        FinalizeBuildStatus:
          Файл "line_detector\Win32\Release\line_detector.unsuccessfulbuild" удаляется.
          Обращение к "line_detector\Win32\Release\line_detector.lastbuildstate".
-     1>Построение проекта "E:\GIT\LineDetector\build\vs2010\LineDetector.vcxproj" завершено (целевые объекты build).
+     1>Построение проекта "D:\MINE_PERSONAL\GIT\LineDetector\build\vs2010\LineDetector.vcxproj" завершено (целевые объекты build).
 
 Построение успешно завершено.
 
-Затраченное время: 00:00:05.70
+Затраченное время: 00:00:00.04

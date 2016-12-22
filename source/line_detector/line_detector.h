@@ -23,10 +23,6 @@ namespace std
 class LineDetector
 {
 	public:
-		LineDetector();
-		void detect(const cv::Mat& image);
-
-	private:
 		typedef struct
 		{
 			std::array<float, 4> line_equation;
@@ -34,6 +30,12 @@ class LineDetector
 			cv::Point2i p2;
 			float length;
 		} Segment;
+
+	public:
+		LineDetector();
+		void detect(const cv::Mat& image, std::vector<Segment>& united_lines);
+
+	private:
 		typedef std::function<bool(const cv::Mat&, const int, const int)> FilterPredicate;
 		typedef std::function<bool(const cv::Mat&, const cv::Point2i&)> SearchPredicate;
 		typedef std::unordered_multimap<cv::Point2i, std::pair<int, int>> Endpoints;
@@ -83,6 +85,11 @@ class LineDetector
 		cv::Point2i intersectPoint(const float a1, const float b1, const float c1, const float a2, const float b2, const float c2) const;
 
 		//afterall_unite_lines
+		void afterallUniteLines(const std::vector<Segment>& lines, std::vector<Segment>& united_lines) const;
+		void computeAngles(const std::vector<Segment>& lines, std::vector<std::pair<float, int>>& angles) const;
+		void buildGraph(const std::vector<Segment>& lines, const std::vector<std::pair<float, int>>& angles, std::unordered_multimap<int, int>& graph) const;
+		void assembleLines(const std::vector<std::vector<int>>& chains, const std::vector<Segment>& lines, std::vector<Segment>& united_lines) const;
+		void chainToLine(const std::vector<int>& chain, const std::vector<Segment>& lines, Segment& line, std::vector<int>& used_lines) const;
 
 		bool isInside(const cv::Mat& image, const cv::Point2i& point) const
 		{
