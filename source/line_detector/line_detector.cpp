@@ -5,7 +5,7 @@
 #include <array>
 #include <iostream>
 
-#define DEBUG_DRAW
+//#define DEBUG_DRAW
 
 LineDetector::LineDetector() :
 	m_kernel_size(3),
