@@ -1,5 +1,5 @@
-﻿Построение начато 22.12.2016 15:07:01.
-     1>Проект "D:\MINE_PERSONAL\GIT\LineDetector\build\vs2010\LineDetector.vcxproj" в узле 2 (целевые объекты build).
+﻿Построение начато 03.03.2017 22:54:49.
+     1>Проект "E:\GIT\LineDetector\build\vs2010\LineDetector.vcxproj" в узле 2 (целевые объекты build).
      1>InitializeBuildStatus:
          Создание "line_detector\Win32\Release\line_detector.unsuccessfulbuild", так как было задано "AlwaysCreate".
        ClCompile:
@@ -7,12 +7,12 @@
          Для всех выходных данных обновления не требуется.
        Link:
          Для всех выходных данных обновления не требуется.
-         LineDetector.vcxproj -> D:\MINE_PERSONAL\GIT\LineDetector\build\vs2010\\..\..\bin\Win32\Release\line_detector.exe
+         LineDetector.vcxproj -> E:\GIT\LineDetector\build\vs2010\\..\..\bin\Win32\Release\line_detector.exe
        FinalizeBuildStatus:
          Файл "line_detector\Win32\Release\line_detector.unsuccessfulbuild" удаляется.
          Обращение к "line_detector\Win32\Release\line_detector.lastbuildstate".
-     1>Построение проекта "D:\MINE_PERSONAL\GIT\LineDetector\build\vs2010\LineDetector.vcxproj" завершено (целевые объекты build).
+     1>Построение проекта "E:\GIT\LineDetector\build\vs2010\LineDetector.vcxproj" завершено (целевые объекты build).
 
 Построение успешно завершено.
 
-Затраченное время: 00:00:00.04
+Затраченное время: 00:00:00.10

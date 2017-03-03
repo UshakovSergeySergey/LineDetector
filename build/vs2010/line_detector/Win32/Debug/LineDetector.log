@@ -1,4 +1,4 @@
-﻿Построение начато 20.12.2016 4:17:31.
+﻿Построение начато 03.03.2017 22:53:16.
      1>Проект "E:\GIT\LineDetector\build\vs2010\LineDetector.vcxproj" в узле 2 (целевые объекты build).
      1>InitializeBuildStatus:
          Создание "line_detector\Win32\Debug\line_detector.unsuccessfulbuild", так как было задано "AlwaysCreate".
@@ -18,4 +18,4 @@
 
 Построение успешно завершено.
 
-Затраченное время: 00:00:00.07
+Затраченное время: 00:00:00.09
